@@ -282,6 +282,82 @@ class EVPNNLRI(object):
             return EVPNNLRI
 
 
+class EVPNAutoDiscovery(EVPNNLRI):
+    '''
+    +---------------------------------------+
+    |  Route Distinguisher (RD) (8 octets)  |
+    +---------------------------------------+
+    |Ethernet Segment Identifier (10 octets)|
+    +---------------------------------------+
+    |  Ethernet Tag ID (4 octets)           |
+    +---------------------------------------+
+    |  MPLS Label (3 octets)                |
+    +---------------------------------------+
+    '''
+    subtype = 1
+    nickname = "Auto-Discovery"
+    
+    def __init__(self, rd, esi, etag, label):
+        '''
+        rd: a RouteDistinguisher
+        esi: an EthernetSegmentIdentifier
+        etag: an EthernetTag
+        label: a LabelStackEntry
+        '''
+        self.rd = rd
+        self.esi = EthernetSegmentIdentifier(0) if esi is None else esi
+        self.etag = EthernetTag(0) if etag is None else etag
+        self.label = label
+        if self.label is None: self.label = NO_LABEL
+        EVPNNLRI.__init__(self, self.__class__.subtype)
+        
+    def __str__(self):
+        desc = "[rd:%s][esi:%s][etag:%s][label:%s]" % (self.rd, self.esi, self.etag, self.label)
+        return "%s:%s" % (EVPNNLRI.__str__(self), desc) 
+    
+    def __cmp__(self,other):
+        if (isinstance(other,self.__class__)
+            and self.rd == other.rd
+            #and self.esi == other.esi  ## must *not* be part of the test
+            and self.etag == other.etag
+            #and self.label == other.label ## must *not* be part of the test 
+            ):
+            return 0
+        else:
+            return -1
+        
+    def __hash__(self):
+        # esi and label must *not* be part of the hash
+        return hash("%s:%s" % (self.rd,self.etag))
+    
+    def _computePackedValue(self):
+        
+        value = ( self.rd.pack() +
+                  self.esi.pack() +
+                  self.etag.pack()
+                )
+        
+        value += self.label.pack()
+        
+        self.packedValue = value
+        
+    @staticmethod
+    def unpack(data):
+        
+        rd = RouteDistinguisher.unpack(data[:8])
+        data=data[8:]
+        
+        esi = EthernetSegmentIdentifier.unpack(data[:10])
+        data=data[10:]
+        
+        etag = EthernetTag.unpack(data[:4])
+        data=data[4:]
+        
+        label = LabelStackEntry.unpack(data[:3])
+        
+        return EVPNAutoDiscovery(rd,esi,etag,label)
+    
+register(EVPNAutoDiscovery)
 
     
 class EVPNMACAdvertisement(EVPNNLRI):
@@ -362,8 +438,14 @@ class EVPNMACAdvertisement(EVPNNLRI):
                 )
         
         if self.ip:
-            encoded_ip = socket.inet_pton( socket.AF_INET, self.ip )
+            
+            if self.ip.count(':'):
+                encoded_ip = socket.inet_pton( socket.AF_INET6, self.ip )
+            else:
+                encoded_ip = socket.inet_pton( socket.AF_INET, self.ip )
+            
             value += pack("B",len(encoded_ip)*8) + encoded_ip
+        
         else:
             value += b'\0'
         
@@ -492,3 +574,97 @@ class EVPNMulticast(EVPNNLRI):
 
 register(EVPNMulticast)
 
+class EVPNEthernetSegment(EVPNNLRI):
+    '''
+    +---------------------------------------+
+    |  RD (8 octets)                        |
+    +---------------------------------------+
+    |Ethernet Segment Identifier (10 octets)|
+    +---------------------------------------+
+    |  IP Address Length (1 octet)          |
+    +---------------------------------------+
+    |  Originating Router's IP Address      |
+    |          (4 or 16 octets)             |
+    +---------------------------------------+
+    '''
+    subtype = 4
+    nickname = "Segment Route"
+    
+    def __init__(self,rd,esi,ip):
+        '''
+        rd: a RouteDistinguisher
+        esi: an EthernetSegmentIdentifier
+        ip: an IP address (v4 or v6)
+        '''
+        self.rd = rd
+        self.esi = EthernetSegmentIdentifier(0) if esi is None else esi
+        self.ip = ip
+
+        EVPNNLRI.__init__(self, self.__class__.subtype)
+        
+    def __str__ (self):
+        desc = "[rd:%s][esi:%s][%s]" % (self.rd, self.esi, self.ip)
+        return "%s:%s" % (EVPNNLRI.__str__(self), desc) 
+    
+    def __cmp__(self,other):
+        if (isinstance(other,self.__class__)
+            and self.rd == other.rd
+            #and self.esi == other.esi  ## must *not* be part of the test
+            and self.ip == other.ip
+            ):
+            return 0
+        else:
+            return -1
+        
+    def __hash__(self):
+        # esi must *not* be part of the hash
+        return hash("%s:%s" % (self.rd,self.ip))
+    
+    def _computePackedValue(self):
+        
+        value = ( self.rd.pack() +
+                  self.esi.pack()
+                )
+        
+        if self.ip:
+            
+            if self.ip.count(':'):
+                encoded_ip = socket.inet_pton( socket.AF_INET6, self.ip )
+            else:
+                encoded_ip = socket.inet_pton( socket.AF_INET, self.ip )
+            
+            value += pack("B",len(encoded_ip)*8) + encoded_ip
+        
+        else:
+            value += b'\0'
+        
+        self.packedValue = value
+        
+    @staticmethod
+    def unpack(data):
+        
+        rd = RouteDistinguisher.unpack(data[:8])
+        data=data[8:]
+        
+        esi = EthernetSegmentIdentifier.unpack(data[:10])
+        data=data[10:]
+        
+        iplen = ord(data[0])
+        data=data[1:]
+        
+        if iplen == 0:
+            ip = None
+            iplen_byte=0
+        elif iplen == 4*8:
+            ip = socket.inet_ntop( socket.AF_INET, data[:4] )
+            iplen_byte=4
+        elif iplen == 16*8:
+            ip = socket.inet_ntop( socket.AF_INET6, data[:16] )
+            iplen_byte=16
+        else:
+            raise Exception("IP field length is given as %d, but EVPN route currently support only IPv4" % iplen)
+        data=data[iplen_byte:]
+        
+        return EVPNEthernetSegment(rd,esi,ip)
+
+register(EVPNEthernetSegment)
