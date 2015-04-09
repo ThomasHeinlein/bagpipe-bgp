@@ -199,6 +199,233 @@ class ECommunity (object):
 			return Encapsulation.unpackFrom( data )
 		else:
 			return ECommunity(data)
+	
+# see RFC 7432, 7.5	
+class ESILabel(ECommunity):
+	
+	'''
+	 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|  Type=0x06	| Sub-Type=0x01 | Flags(1 octet)|  Reserved=0   |
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|  Reserved=0   |		  ESI Label						    	|
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	'''
+	
+	ECommunity_TYPE = 0x06
+	ECommunity_SUBTYPE = 0x01
+	
+	def __init__(self, single_active, root, esi_label):
+		'''
+		single_active: [True|False]
+			True: multihomed site operates in Single-Active redundancy mode
+			False: multihomed site operates in All-Active redundancy mode
+		root: [True|False] (P2MP LSPs)
+			True: root: asigns the labels
+			False: leaf: initiate LSPs towards the root
+		esi_label: describes an ES by the advertising PE (3 bytes)
+		'''
+		self.single_active = single_active
+		self.root = root
+		self.esi_label = esi_label
+		
+	def pack(self):
+		flags = 0x00
+		if self.single_active == False and self.root == False:
+			flags = 0x00
+		elif self.single_active == True and self.root == False:
+			flags = 0x01
+		elif self.single_active == False and self.root == True:
+			flags = 0x02
+		elif self.single_active == True and self.root == True:
+			flags = 0x03
+		
+		return pack('!BBBBB3s', 0x06, 0x01, flags, 0x00, 0x00, self.esi_label)
+		
+	def __str__(self):
+		return "ESI Label"
+		
+	def __cmp__(self):
+		return 0;
+	
+	def __hash__(self):
+		return hash(self.community)
+	
+	@staticmethod
+	def unpackFrom(data):
+		type_  = ord(data[0]) & 0x0F
+		stype = ord(data[1])
+		
+		assert(type_==ESILabel.ECommunity_TYPE)
+		assert(stype==ESILabel.ECommunity_SUBTYPE)
+		
+		flags = ord(data[2])
+		data = data[5:]
+		esi_label = data
+		single_active = False
+		root = False
+		if flags == 0x00:
+			single_active = False
+			root = False
+		elif flags == 0x01:
+			single_active = True
+			root = False
+		elif flags == 0x02:
+			single_active = False
+			root = True
+		elif flags == 0x03:
+			single_active = True
+			root = True
+		return ESILabel(single_active, root, esi_label)
+		
+# see RFC7432, 7.6
+class ESImportRouteTarget(ECommunity):
+	
+	'''
+	 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|   Type=0x06   | Sub-Type=0x02 |		  ES-Import			    |
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|					 ES-Import Cont'd						    |
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	'''
+	
+	ECommunity_TYPE = 0x06
+	ECommunity_SUBTYPE = 0x02
+	
+	def __init__(self, es_import):
+		'''
+		es_import: 6 bytes derived from ESI
+		'''
+		self.es_import = es_import
+		
+	def pack(self):
+		return pack('!BB6s', 0x06, 0x02, self.es_import) 
+	
+	def __str__(self):
+		return "ES-Import Route Target"
+		
+	def __cmp__(self):
+		return 0;
+	
+	def __hash__(self):
+		return hash(self.community)
+	
+	@staticmethod
+	def unpackFrom(data):
+		type_  = ord(data[0]) & 0x0F
+		stype = ord(data[1])
+		
+		assert(type_==ESImportRouteTarget.ECommunity_TYPE)
+		assert(stype==ESImportRouteTarget.ECommunity_SUBTYPE)
+		
+		data = data[2:]
+		es_import = data
+		return ESImportRouteTarget(es_import)
+
+# see RFC 7432, 7.7		
+class MACMobility(ECommunity):
+	
+	'''
+	 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|   Type=0x06   | Sub-Type=0x00 |Flags(1 octet) |  Reserved=0	|
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|					   Sequence Number						    |
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	'''
+	
+	ECommunity_TYPE = 0x06
+	ECommunity_SUBTYPE = 0x00
+	
+	def __init__(self, static, sequence_number):
+		'''
+		static: [True|False]
+			True: MAC address is static and cannot move
+			False: MAC address is not static
+		sequence_number: Integer indicting the "newness" of the MAC-address
+		'''
+		self.static = static
+		self.sequence_number = sequence_number
+		
+	def pack(self):
+		flags = 0x00
+		if self.static == True:
+			flags = 0x01
+		else:
+			flags = 0x00
+			
+		return pack('!BBBBI', 0x06, 0x00, flags, 0x00, self.sequence_number) 
+	
+	def __str__(self):
+		return "MAC Mobility"
+		
+	def __cmp__(self):
+		return 0;
+	
+	def __hash__(self):
+		return hash(self.community)
+	
+	@staticmethod
+	def unpackFrom(data):
+		type_  = ord(data[0]) & 0x0F
+		stype = ord(data[1])
+		
+		assert(type_==MACMobility.ECommunity_TYPE)
+		assert(stype==MACMobility.ECommunity_SUBTYPE)
+		
+		flags = ord(data[2])
+		static = False
+		if flags == 0x01:
+			flags = True
+		else:
+			flags = False
+		data = data[4:]
+		sequence_number = data
+		return MACMobility(static, sequence_number)
+		
+# see RFC 7432, 7.8
+class DefaultGateway(ECommunity):
+	
+	'''
+	 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|   Type=0x03   | Sub-Type=0x0d |  Reserved=0	|  Reserved=0	|
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	|  Reserved=0	|  Reserved=0	|  Reserved=0	|  Reserved=0	|
+	+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	'''
+	
+	ECommunity_TYPE = 0x03
+	ECommunity_SUBTYPE = 0x0d
+	
+	def __init__(self):
+		'''
+		Value Field is reserved (set to 0 by sender, ignored by receiver)
+		'''
+		
+		
+	def pack(self):
+		return pack('!BBBBBBBB', 0x03, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00) 
+	
+	def __str__(self):
+		return "Default Gateway"
+		
+	def __cmp__(self):
+		return 0;
+	
+	def __hash__(self):
+		return hash(self.community)
+	
+	@staticmethod
+	def unpackFrom(data):
+		type_  = ord(data[0]) & 0x0F
+		stype = ord(data[1])
+		
+		assert(type_==DefaultGateway.ECommunity_TYPE)
+		assert(stype==DefaultGateway.ECommunity_SUBTYPE)
+		
+		return DefaultGateway()
 		
 
 class RouteTarget(ECommunity):

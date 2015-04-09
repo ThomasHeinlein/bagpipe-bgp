@@ -1,0 +1,17 @@
+eclipse.preferences.version=1
+encoding//bagpipe/bgp/bgp_daemon.py=utf-8
+encoding//bagpipe/bgp/fakerr.py=utf-8
+encoding//bagpipe/bgp/rest_api.py=utf-8
+encoding//bagpipe/bgp/vpn/evpn/__init__.py=utf-8
+encoding//bagpipe/bgp/vpn/evpn/linux_vxlan.py=utf-8
+encoding//bagpipe/bgp/vpn/vpn_instance.py=utf-8
+encoding//bagpipe/exabgp/configuration.py=utf-8
+encoding//bagpipe/exabgp/message/update/__init__.py=utf-8
+encoding//bagpipe/exabgp/message/update/attribute/communities.py=utf-8
+encoding//bagpipe/exabgp/message/update/attribute/flag.py=utf-8
+encoding//bagpipe/exabgp/message/update/attribute/id.py=utf-8
+encoding//bagpipe/exabgp/message/update/attribute/labels.py=utf-8
+encoding//bagpipe/exabgp/message/update/attribute/origin.py=utf-8
+encoding//bagpipe/exabgp/message/update/attributes.py=utf-8
+encoding//bagpipe/exabgp/message/update/route.py=utf-8
+encoding//bagpipe/exabgp/network/protocol.py=utf-8
